@@ -3,7 +3,7 @@ import sys
 import os
 
 def stealth_scan():
-    print("=== PROFESYONEL SYN STEALTH SCANNER ===")
+    print("=== SYN STEALTH PORT SCANNER ===")
     
     while True:
         try:
@@ -53,11 +53,9 @@ def stealth_scan():
                     elif cevap.getlayer(TCP).flags == "RA" or cevap.getlayer(TCP).flags == "R":
                         log_satiri = f"Port {port} | KAPALI 🔴"
                         print(f"-> {log_satiri}")
-
-                # 🔥 ANLIK LOGLAMA SİHRİ (Zurnanın Zırt Dediği Yer)
+                        
                 # Her port işleminde dosyayı "a" (append - sonuna ekle) modunda açıyoruz.
                 # "with open" bloğu işi bittiği mikro saniyede dosyayı kaydeder ve kapatır.
-                # Sen terminali CTRL+C ile kapatsan bile o saliseye kadar yazılanlar asla silinmez!
                 if log_satiri:
                     with open(dosya_adi, "a", encoding="utf-8") as f:
                         f.write(log_satiri + "\n")
