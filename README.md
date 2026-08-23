@@ -1,10 +1,10 @@
-# 🎯 Advanced SYN Stealth Port Scanner & Real-Time Logger
+# Advanced SYN Stealth Port Scanner & Real-Time Logger
 
 Bu proje, bilgisayar ağlarında güvenlik duvarlarını (Firewall) atlatarak açık kapıları tespit etmek amacıyla geliştirilmiş, **Yarım Açık Tarama (SYN Stealth Scan)** mantığıyla çalışan bağımsız bir siber güvenlik ve ağ keşif aracıdır.
 
 ---
 
-## 🧐 Geliştirici Notu ve Projenin Amacı
+## Geliştirici Notu ve Projenin Amacı
 
 Ben **14 yaşında bir Bilişim ve Ağ Teknolojileri öğrencisiyim**. Bu aracı, VirtualBox laboratuvarımda Kali Linux ve Windows 11 işletim sistemleri arasında sızma testleri (pentest) yaparken, standart tarayıcıların ağda bıraktığı gürültülü izleri (log) azaltmak ve Firewall cihazlarının çalışma mantığını (Paket Drop/Filtreleme) pratik olarak anlamak için tek bir bağımsız script olarak geliştirdim.
 
@@ -12,7 +12,7 @@ Ben **14 yaşında bir Bilişim ve Ağ Teknolojileri öğrencisiyim**. Bu aracı
 
 ---
 
-## 🛠️ Teknik Özellikler & Siber Güvenlik Anatomisi
+## Teknik Özellikler & Siber Güvenlik Anatomisi
 
 *   **SYN Stealth Scan (Yarım Açık Tarama):** Standart 3 adımlı el sıkışmayı (Three-Way Handshake) tamamlamaz. Hedef porttan `SYN-ACK` (Onay) sinyali geldiği an portun **AÇIK** olduğunu anlar ve el sıkışmayı bitirmeden hemen bir `RST` (Reset) paketi fırlatarak kaçar. Bu sayede hedef sistemdeki Firewall loglarında yakalanmamayı hedefler.
 *   **Anlık Loglama (Real-Time Logging):** Powershell veya terminal pencerelerinin satır sınırı (buffer limit) sorununu aşmak ve veri kaybını önlemek için tarama sonuçları **anlık olarak** saliseler içinde diskteki `[Hedef_IP]_rapor.txt` dosyasına yazılır. Tarama CTRL+C ile yarıda kesilse bile o ana kadar bulunan tüm veriler korunur.
@@ -21,7 +21,7 @@ Ben **14 yaşında bir Bilişim ve Ağ Teknolojileri öğrencisiyim**. Bu aracı
 
 ---
 
-## 📦 Dosya Konumu
+## Dosya Konumu
 
 Çalışma alanında bağımsız bir siber güvenlik aracı olarak konumlandırılmıştır:
 ```text
@@ -32,7 +32,7 @@ Ben **14 yaşında bir Bilişim ve Ağ Teknolojileri öğrencisiyim**. Bu aracı
 
 ---
 
-## 🚀 Çalıştırma Talimatı
+## Çalıştırma Talimatı
 
 Scapy kütüphanesi doğrudan bilgisayarın ağ kartına (donanıma) paket enjekte ettiği için bu aracın **Yönetici (Administrator)** yetkileriyle çalıştırılması şarttır.
 
