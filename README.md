@@ -47,6 +47,7 @@ Scapy kütüphanesi doğrudan bilgisayarın ağ kartına (donanıma) paket enjek
 
 ---
 
-## ⚠️ Yasal Uyarı (Legal Disclaimer)
+[!WARNING]
+**Yasal Uyarı (Legal Disclaimer)**
 
 Bu araç tamamen eğitim, akademik araştırma ve yerel siber güvenlik laboratuvarı testleri amacıyla geliştirilmiştir. Bu kodun, yasal izin belgesi olmayan harici ve yetkisiz sistemler üzerinde çalıştırılmasından doğacak tüm hukuki sorumluluk tamamen kullanıcıya aittir. Geliştirici hiçbir sorumluluk kabul etmez.
