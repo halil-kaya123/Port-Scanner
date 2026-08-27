@@ -1,4 +1,6 @@
 from scapy.all import IP, TCP, sr1, send
+import random
+import time
 import sys
 import os
 
@@ -9,9 +11,11 @@ def stealth_scan():
         portlar = []
         try:
             hedef_ip = input("\nTaramak istediğin IP adresi (Çıkış için -1): ")
+            
             if hedef_ip == "-1":
                 print("Çıkış yapılıyor...")
                 break
+
         except Exception as e:
             print(f"Hata = {e}. Lütfen geçerli bir IP girin!")
             continue
@@ -30,6 +34,7 @@ def stealth_scan():
             os.remove(dosya_yeri)
 
         while True:
+            print("\nPort Tarama Seçeneği\n")
             print("2 port arası tarama (1)")
             print("Belirli portları tarama (2)")
             print("En popüler 100 portu tarama (3)")
@@ -43,36 +48,47 @@ def stealth_scan():
 
             if secim == 1:
                 try:
+
                     ilk_port=int(input("İlk portu giriniz:"))
                     ikinci_port=int(input("İkinci portu giriniz:"))
+
                     if ilk_port<0 or ikinci_port<0:
                         print("Seçim en az 0 olmalıdır!")
                         continue
+
                 except ValueError:
                     print("Lütfen sayısal veri giriniz.")
                     continue
+
                 min_port=min(ilk_port, ikinci_port)
                 max_port=max(ilk_port, ikinci_port)
+
                 for port in range(min_port, max_port+1):
                     portlar.append(port)
+
                 break
 
             elif secim == 2:
                 while True:
                     try:
                         belirli_portlar=int(input("Taranacak belirli portları girin (çıkış için -1):"))
+
                         if belirli_portlar == -1 and len(portlar)==0:
                             print("Henüz port girilmemiş!")
                             continue
+
                         elif belirli_portlar == -1 and len(portlar)>0:
                             print("Çıkış yapılıyor...")
                             break
+
                         elif belirli_portlar<0 or belirli_portlar>65535:
                             print("Port numaraları 0-65535 arasında olmalı!")
                             continue
+
                         else:
                             portlar.append(belirli_portlar)
                             continue
+
                     except ValueError:
                         print("Lütfen sayısal veri giriniz.")
                         continue
@@ -97,8 +113,32 @@ def stealth_scan():
                 for i in range(65536):
                     portlar.append(i)
                 break
+
             else:
                 print("Seçenek bulunamadı!")
+                continue
+
+        while True:
+
+            print("\nGizlilik ve Hız Ayarı\n")
+            print("1-) Agresif ayar (Hızlı ancak aşırı gürültülü)")
+            print("2-) Dengeli ayar (Normal hız, orta gürültülü)")
+            print("3-) Sinsi ayar (Çok yavaş ancak aşırı gizli ve az gürültülü)")
+
+            try:
+                gizlilik_ayari=int(input("="))
+
+                if gizlilik_ayari < 1 or gizlilik_ayari > 3:
+                    print("1-3 arası değer giriniz lütfen")
+                    continue
+                
+                elif gizlilik_ayari>1:
+                    random.shuffle(portlar)
+
+                break
+            
+            except ValueError:
+                print("Lütfen sayısal veri giriniz.")
                 continue
         
         print(f"\n[+] {hedef_ip} için sinsi tarama başlatıldı...")
@@ -106,8 +146,25 @@ def stealth_scan():
 
         for port in portlar:
             try:
+
+                if gizlilik_ayari == 2:
+                    time.sleep(random.uniform(0.5,2.0))
+
+                elif gizlilik_ayari == 3:
+                    time.sleep(random.uniform(5.0,10.0))
+
+
+                if gizlilik_ayari == 1:
+                    timeout_ayari=0.1
+
+                elif gizlilik_ayari == 2:
+                    timeout_ayari=0.5
+
+                elif gizlilik_ayari == 3:
+                    timeout_ayari=1.0
+
                 syn_paketi = IP(dst=hedef_ip) / TCP(dport=port, flags="S")
-                cevap = sr1(syn_paketi, timeout=0.1, verbose=0)
+                cevap = sr1(syn_paketi, timeout=timeout_ayari, verbose=0)
                 
                 log_satiri = "" # Dosyaya yazılacak metni tutacak değişken
 
