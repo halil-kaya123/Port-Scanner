@@ -310,7 +310,10 @@ def stealth_scan():
                     with open(dosya_yeri, "a", encoding="utf-8") as f:
                         f.write(f"Tahmini İşletim Sistemi = {tahmini_os}")
                         f.write(log_satiri + "\n")
-
+            except KeyboardInterrupt:
+                print("Tarama Kullanıcı Tarafından Durduruldu.")
+                break
+            
             except Exception as e:
                 continue
 
