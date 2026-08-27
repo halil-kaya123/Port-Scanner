@@ -2,6 +2,7 @@ from scapy.all import IP, TCP, sr1, send
 from scapy.layers.l2 import ARP, Ether
 from scapy.sendrecv import srp
 from datetime import timedelta
+import urllib.request
 import random
 import socket
 import time
@@ -10,36 +11,57 @@ import os
 
 def agi_tara(hedef_blok):
     print(f"\n{hedef_blok} ağı taranıyor, lütfen bekleyin...")
-
     try:
         arp_istegi = ARP(pdst=hedef_blok)
         yayin_katmani = Ether(dst="ff:ff:ff:ff:ff:ff")
-        tam_paket = yayin_katmani/arp_istegi
+        tam_paket = yayin_katmani / arp_istegi
         cevaplanan_listesi = srp(tam_paket, timeout=3, verbose=False)[0]
-    except Exception as e:
-        print(f"Tarama sırasında sistemsel hata oluştu")
+    except Exception:
+        print("Tarama sırasında sistemsel hata oldu.")
         return
 
-    print(f"{'IP ADRESİ':<18}{'MAC ADRESİ':<20}{'CİHAZ ADI (HOSTNAME)'}")
+    # Sütunları genişleterek ÜRETİCİ bilgisi tabloya eklendi
+    print(f"\n{'IP ADRESİ':<18}{'MAC ADRESİ':<20}{'CİHAZ ADI (HOSTNAME)':<22}{'ÜRETİCİ'}")
+    print("-" * 85)
 
     cihaz_sayisi = 0
     for gonderilen, alinan in cevaplanan_listesi:
-        ip_adresi=alinan.psrc
-        mac_adresi=alinan.hwsrc
+        ip_adresi = alinan.psrc
+        mac_adresi = alinan.hwsrc
 
+        # 1. ADIM: Hostname Çözümleme
         try:
             isim_cozumleme = socket.gethostbyaddr(ip_adresi)
-            cihaz_ismi=isim_cozumleme[0]
+            cihaz_ismi = isim_cozumleme[0]
         except (socket.herror, socket.gaierror):
-            cihaz_ismi="Bilinmeyen cihaz"
+            cihaz_ismi = "Bilinmeyen cihaz"
 
-        print(f"{ip_adresi:<18}{mac_adresi:<20}{cihaz_ismi}")
-        cihaz_sayisi+=1
+        # 2. ADIM: MAC Adresinden Marka Bulma
+        ureti_firma = "Bilinmiyor"
+        try:
+            # macvendors.com API'sine istek atıyoruz (Kayıt/Key gerektirmez)
+            url = f"https://api.macvendors.com/{mac_adresi}"
+            istek = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            # API saniyede en fazla 1 isteğe izin verdiği için ağı yormadan hızlıca okuyoruz
+            with urllib.request.urlopen(istek, timeout=2) as response:
+                ureti_firma = response.read().decode('utf-8')
+        except Exception:
+            # API sınırına takılırsa veya MAC adresi yerel/özel ise "Bilinmiyor" olarak kalır
+            ureti_firma = "Bilinmeyen Marka"
 
-    print(f"Tarama tamamlandı. Ağda {cihaz_sayisi} tane aktif cihaz bulundu\n")
+        # Bulguları yeni sütun düzenine göre ekrana basıyoruz
+        print(f"{ip_adresi:<18}{mac_adresi:<20}{cihaz_ismi:<22} {ureti_firma}")
+        cihaz_sayisi += 1
+        
+        # API'nin saniye sınırına takılmamak için her cihaz arasında çok küçük bir duraklama koyuyoruz
+        time.sleep(0.5)
+
+    print(f"\nTarama tamamlandı. Ağda {cihaz_sayisi} tane aktif cihaz bulundu.\n")
+
 
 def baslat():
-    print("YEREL AĞ TARAYICI")
+    print("\nYEREL AĞ TARAYICI\n")
     while True:
         try:
             print("Taramak istediğiniz ağ bloğunu girin.")
