@@ -6,7 +6,6 @@ import urllib.request
 import random
 import socket
 import time
-import sys
 import os
 
 def agi_tara(hedef_blok):
@@ -86,6 +85,24 @@ def baslat():
             continue
 
 def stealth_scan():
+    risk_veritabanı = {
+        21:   "FTP servisi aktif. Şifreleme kullanılmıyorsa kimlik doğrulama verileri açık iletilebilir.",
+        22:   "Servis aktif. Kaba kuvvet (Brute Force) girişimlerine karşı önlem alınması önerilir.",
+        23:   "Servis aktif. Güvenli olmayan protokol kullanımı; SSH geçişi önerilir.",
+        25:   "E-posta servisi aktif. Açık röle (Open Relay) yapılandırması kontrol edilmelidir.",
+        53:   "DNS servisi aktif. Bölge transferi (Zone Transfer) izinleri incelenmelidir.",
+        80:   "HTTP web sunucusu aktif. Yazılım sürüm zafiyetleri kontrol edilmelidir.",
+        110:  "POP3 servisi aktif. Şifreleme kullanılmıyorsa kimlik doğrulama verileri açık iletilebilir.",
+        135:  "Windows RPC servisi aktif. Ağ içi erişim izinleri sınırlandırılmalıdır.",
+        139:  "NetBIOS servisi aktif. Dosya paylaşım izinleri denetlenmelidir.",
+        443:  "HTTPS güvenli web sunucusu aktif. SSL/TLS sertifika ve şifreleme algoritmaları incelenmelidir.",
+        445:  "Windows SMB servisi aktif. Güncel güvenlik yamalarının (MS17-010 vb.) doğrulanması önerilir.",
+        1433: "MSSQL veritabanı servisi aktif. Varsayılan yetkili hesap şifreleri gözden geçirilmelidir.",
+        3306: "MySQL veritabanı servisi aktif. Dış ağ erişim kuralları sınırlandırılmalıdır.",
+        3389: "Windows RDP (Uzak Masaüstü) aktif. Ağ seviyesinde kimlik doğrulama (NLA) önerilir.",
+        8080: "Alternatif HTTP sunucusu aktif. Test veya yönetim panellerinin varlığı incelenmelidir."
+    }
+
     while True:
         print("Ağ taraması yapılsın mı? (e/h)")
         secim=input("=").lower()
@@ -98,7 +115,7 @@ def stealth_scan():
         else:
             print("Seçim bulunamadı")
 
-    print("PROFESYONEL SYN STEALTH SCANNER")
+    print("Personal Network Security Scanner")
     
     while True:
         portlar = []
@@ -147,6 +164,10 @@ def stealth_scan():
 
                     if ilk_port<0 or ikinci_port<0:
                         print("Seçim en az 0 olmalıdır!")
+                        continue
+
+                    elif ilk_port>65535 or ikinci_port>65535:
+                        print("Seçim maksimum 65535 olmalıdır!")
                         continue
 
                 except ValueError:
@@ -203,7 +224,7 @@ def stealth_scan():
                 break
 
             elif secim == 4:
-                for i in range(65536):
+                for i in range(1,65536):
                     portlar.append(i)
                 break
 
@@ -234,21 +255,17 @@ def stealth_scan():
                 print("Lütfen sayısal veri giriniz.")
                 continue
         
-        print(f"\n[+] {hedef_ip} için sinsi tarama başlatıldı...")
-        print(f"[+] Sonuçlar anlık olarak '{dosya_adi}' dosyasına kaydediliyor.\n")
+        print(f"\n{hedef_ip} için tarama başlatıldı...")
+        print(f"Sonuçlar anlık olarak '{dosya_adi}' dosyasına kaydediliyor.\n")
         simdi=time.time()
 
-        tahmini_os = "Bilinmiyor (Yanıt Alınamadı)"
+        tahmini_os = "Belirlenemedi (Yanıt Alınamadı)"
         try:
-            # Hedefin durumunu anlamak için hızlıca tek bir SYN paketi fırlatıyoruz
             os_paketi = IP(dst=hedef_ip) / TCP(dport=80, flags="S")
             os_cevabi = sr1(os_paketi, timeout=1.0, verbose=0)
             
-            # Eğer karşıdan bir cevap (SYN-ACK veya RST) dönerse TTL değerini okuyoruz
             if os_cevabi and os_cevabi.haslayer(IP):
                 ttl_degeri = os_cevabi.getlayer(IP).ttl
-                
-                # Standart TTL imza analizleri:
                 if ttl_degeri <= 64:
                     tahmini_os = "Linux / Android / macOS"
                 elif 64 < ttl_degeri <= 128:
@@ -256,73 +273,106 @@ def stealth_scan():
                 elif 128 < ttl_degeri <= 255:
                     tahmini_os = "Cisco / Network Cihazı (Unix tabanlı)"
         except Exception:
-            # Ağda anlık bir kopma veya engel olursa taramayı çökertmesin diye sessizce geçiyoruz
             pass
 
-        with open(dosya_yeri, "w", encoding="utf-8") as rapor:
-            rapor.write(f"Tahmini İşletim Sistemi = {tahmini_os}")
+                # Rapor dosyasının en tepesindeki tablo başlığı düzenlemesi
+        with open(dosya_yeri, "w", encoding="utf-8") as f:
+            f.write(f"PERSONAL NETWORK SECURITY SCANNER REPORT\n")
+            f.write(f"Hedef IP Adresi          = {hedef_ip}\n")
+            f.write(f"Tahmini İşletim Sistemi  = {tahmini_os} (TTL Analizi)\n")
+            f.write(f"Tarama Başlangıç Zamanı  = {time.strftime('%d/%m/%Y %H:%M:%S')}\n")
+            f.write(f"Tarama Modu              = Mod {gizlilik_ayari}\n")
+            f.write("-" * 125 + "\n")
+            f.write(f"{'PORT':<10}{'DURUM':<15}{'MUHTEMEL SERVİS':<18}{'CANLI BANNER (YAZILIM SÜRÜMÜ)':<35}{'GÜVENLİK TAVSİYESİ / NOTU'}\n")
+            f.write("-" * 125 + "\n")
 
+        # PORT TARAMA DÖNGÜSÜ
         for port in portlar:
-            
             try:
-
                 if gizlilik_ayari == 2:
-                    time.sleep(random.uniform(0.5,2.0))
-
+                    time.sleep(random.uniform(0.5, 2.0))
                 elif gizlilik_ayari == 3:
-                    time.sleep(random.uniform(5.0,10.0))
+                    time.sleep(random.uniform(5.0, 10.0))
 
-
-                if gizlilik_ayari == 1:
-                    timeout_ayari=0.1
-
-                elif gizlilik_ayari == 2:
-                    timeout_ayari=0.5
-
-                elif gizlilik_ayari == 3:
-                    timeout_ayari=1.0
+                timeout_ayari = 0.1 if gizlilik_ayari == 1 else (0.5 if gizlilik_ayari == 2 else 1.0)
 
                 syn_paketi = IP(dst=hedef_ip) / TCP(dport=port, flags="S")
                 cevap = sr1(syn_paketi, timeout=timeout_ayari, verbose=0)
                 
-                log_satiri = "" # Dosyaya yazılacak metni tutacak değişken
+                durum = "FILTERED / YANIT YOK"
+                muhtemel_servis = "Bilinmiyor"
+                canlı_banner = "Alınamadı"
+                tavsiye_notu = risk_veritabanı.get(port, "Servis yapılandırmasının ve erişim izinlerinin incelenmesi önerilir.")
 
+                try:
+                    muhtemel_servis = socket.getservbyport(port).upper()
+                except Exception:
+                    pass
+
+                # SENARYO A: YANIT YOK / FİLTRELİ
                 if cevap is None:
-                    log_satiri = f"Port {port} | FİLTRELENDİ (FİREWALL VAR) 🛡️"
-                    print(f"-> {log_satiri}")
+                    durum = "NO PESPONSE / FILTERED"
+                    tavsiye_notu = "Paket yanıtı alınamadı; ağ engeli, drop durumu veya host durumu kontrol edilmelidir."
                 
+                # SENARYO B: YANIT GELDİ
                 elif cevap.haslayer(TCP):
                     bayraklar = int(cevap.getlayer(TCP).flags)
+                    
+                    # PORT AÇIK (SYN-ACK ALINDI)
                     if (bayraklar & 0x12) == 0x12:
-                        log_satiri = f"Port {port} | AÇIK 🟢"
-                        print(f"-> {log_satiri}")
+                        durum = "OPEN"
                         
+                        # Banner Grabbing (Sürüm Yakalama) Alanı
+                        try:
+                            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            s.settimeout(1.0)
+                            s.connect((hedef_ip, port))
+                            banner = s.recv(1024)
+                            if banner:
+                                canlı_banner = banner.decode('utf-8', errors='ignore').strip().replace('\r', '').replace('\n', ' ')
+                            s.close()
+                        except Exception as e:
+                            canlı_banner = f"Bağlantı Açık (Veri Okunamadı)"
+
+                        # El sıkışmayı sonlandırıp kaçıyoruz (Stealth)
                         rst_paketi = IP(dst=hedef_ip) / TCP(dport=port, flags="R")
                         send(rst_paketi, verbose=0)
                         
+                    # PORT KAPALI (RST-ACK ALINDI)
                     elif (bayraklar & 0x04):
-                        log_satiri = f"Port {port} | KAPALI 🔴"
-                        print(f"-> {log_satiri}")
+                        durum = "CLOSED"
+                        tavsiye_notu = "Port kapalı durumdadır."
 
-                # Her port işleminde dosyayı "a" (append - sonuna ekle) modunda açıyoruz.
-                # "with open" bloğu işi bittiği mikro saniyede dosyayı kaydeder ve kapatır.
-                if log_satiri:
+                # Konsol ekranına basma kuralları (Kapalı portlar ekranda kalabalık yapmasın diye süzülür)
+                if durum != "CLOSED":
+                    print(f"-> Port {port:<5} | Durum: {durum:<10} | Service: {muhtemel_servis:<12} | Banner: {canlı_banner[:25]}")
+
+                    # Sütun hizalamalı TXT rapor satırı oluşturma
+                    log_satiri = f"{port:<10}{durum:<15}{muhtemel_servis:<18}{canlı_banner:<35}{tavsiye_notu}"
+                    
                     with open(dosya_yeri, "a", encoding="utf-8") as f:
-                        f.write(f"Tahmini İşletim Sistemi = {tahmini_os}")
                         f.write(log_satiri + "\n")
+
             except KeyboardInterrupt:
-                print("Tarama Kullanıcı Tarafından Durduruldu.")
+                print("\nTarama Kullanıcı Tarafından Durduruldu.")
                 break
-            
             except Exception as e:
+                # Hatalar sessizce geçiştirilmiyor, konsola debug çıktısı basılıyor
+                print(f"Port {port} taranırken sistemsel bir hata oluştu: {e}")
                 continue
 
-        bitis=time.time()
-        aradaki_fark=bitis-simdi
-        gecen_sure=str(timedelta(seconds=int(aradaki_fark)))
-        print(f"\nSinsi Tarama Tamamlandı. Tüm sonuçlar masaüstünde '{dosya_adi}' dosyasına kaydedildi. ---")
+        bitis = time.time()
+        aradaki_fark = bitis - simdi
+        gecen_sure = str(timedelta(seconds=int(aradaki_fark)))
+        
+        print(f"\nTarama Tamamlandı. Tüm sonuçlar masaüstünde '{dosya_adi}' dosyasına kaydedildi.")
         print(f"Tahmini işletim sistemi = {tahmini_os}")
         print(f"Tarama süresi = {gecen_sure}")
+
+        # Rapor sonu özeti ekleme
+        with open(dosya_yeri, "a", encoding="utf-8") as f:
+            f.write("-" * 125 + "\n")
+            f.write(f"Tarama Süresi = {gecen_sure}\n")
 
 if __name__ == "__main__":
     try:
