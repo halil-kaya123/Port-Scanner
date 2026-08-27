@@ -1,17 +1,88 @@
 from scapy.all import IP, TCP, sr1, send
+from scapy.layers.l2 import ARP, Ether
+from scapy.sendrecv import srp
+from datetime import timedelta
 import random
+import socket
 import time
 import sys
 import os
 
+def agi_tara(hedef_blok):
+    print(f"\n{hedef_blok} ağı taranıyor, lütfen bekleyin...")
+
+    try:
+        arp_istegi = ARP(pdst=hedef_blok)
+        yayin_katmani = Ether(dst="ff:ff:ff:ff:ff:ff")
+        tam_paket = yayin_katmani/arp_istegi
+        cevaplanan_listesi = srp(tam_paket, timeout=3, verbose=False)[0]
+    except Exception as e:
+        print(f"Tarama sırasında sistemsel hata oluştu")
+        return
+
+    print(f"{'IP ADRESİ':<18}{'MAC ADRESİ':<20}{'CİHAZ ADI (HOSTNAME)'}")
+
+    cihaz_sayisi = 0
+    for gonderilen, alinan in cevaplanan_listesi:
+        ip_adresi=alinan.psrc
+        mac_adresi=alinan.hwsrc
+
+        try:
+            isim_cozumleme = socket.gethostbyaddr(ip_adresi)
+            cihaz_ismi=isim_cozumleme[0]
+        except (socket.herror, socket.gaierror):
+            cihaz_ismi="Bilinmeyen cihaz"
+
+        print(f"{ip_adresi:<18}{mac_adresi:<20}{cihaz_ismi}")
+        cihaz_sayisi+=1
+
+    print(f"Tarama tamamlandı. Ağda {cihaz_sayisi} tane aktif cihaz bulundu\n")
+
+def baslat():
+    print("YEREL AĞ TARAYICI")
+    while True:
+        try:
+            print("Taramak istediğiniz ağ bloğunu girin.")
+            print("Örnek formatlar: 192.168.1.0/24 veya 10.0.0.0/24.")
+            hedef_blok = input("Ağ Bloğu (çıkış için -1):").strip()
+
+            if hedef_blok=="-1":
+                print("Çıkış yapılıyor...\n")
+                break
+
+            if not hedef_blok:
+                print("Lütfen boş bırakmayın!")
+                continue
+
+            agi_tara(hedef_blok)
+
+        except KeyboardInterrupt:
+            print("Kullanıcı tarafından kesildi.")
+            break
+        except Exception as e:
+            print(f"Hata: {e}. Lütfen kontrol edin.")
+            continue
+
 def stealth_scan():
-    print("=== PROFESYONEL SYN STEALTH SCANNER ===")
+    while True:
+        print("Ağ taraması yapılsın mı? (e/h)")
+        secim=input("=").lower()
+        if secim=="e" or secim=="evet" or secim=="yes" or secim=="1":
+            baslat()
+            break
+        elif secim=="h" or secim=="hayır" or secim=="no" or secim=="0":
+            print("Ağ taraması yapılmayacak\n")
+            break
+        else:
+            print("Seçim bulunamadı")
+
+    print("PROFESYONEL SYN STEALTH SCANNER")
     
     while True:
         portlar = []
         try:
             hedef_ip = input("\nTaramak istediğin IP adresi (Çıkış için -1): ")
-            
+
             if hedef_ip == "-1":
                 print("Çıkış yapılıyor...")
                 break
@@ -143,8 +214,34 @@ def stealth_scan():
         
         print(f"\n[+] {hedef_ip} için sinsi tarama başlatıldı...")
         print(f"[+] Sonuçlar anlık olarak '{dosya_adi}' dosyasına kaydediliyor.\n")
+        simdi=time.time()
+
+        tahmini_os = "Bilinmiyor (Yanıt Alınamadı)"
+        try:
+            # Hedefin durumunu anlamak için hızlıca tek bir SYN paketi fırlatıyoruz
+            os_paketi = IP(dst=hedef_ip) / TCP(dport=80, flags="S")
+            os_cevabi = sr1(os_paketi, timeout=1.0, verbose=0)
+            
+            # Eğer karşıdan bir cevap (SYN-ACK veya RST) dönerse TTL değerini okuyoruz
+            if os_cevabi and os_cevabi.haslayer(IP):
+                ttl_degeri = os_cevabi.getlayer(IP).ttl
+                
+                # Standart TTL imza analizleri:
+                if ttl_degeri <= 64:
+                    tahmini_os = "Linux / Android / macOS"
+                elif 64 < ttl_degeri <= 128:
+                    tahmini_os = "Windows"
+                elif 128 < ttl_degeri <= 255:
+                    tahmini_os = "Cisco / Network Cihazı (Unix tabanlı)"
+        except Exception:
+            # Ağda anlık bir kopma veya engel olursa taramayı çökertmesin diye sessizce geçiyoruz
+            pass
+
+        with open(dosya_yeri, "w", encoding="utf-8") as rapor:
+            rapor.write(f"Tahmini İşletim Sistemi = {tahmini_os}")
 
         for port in portlar:
+            
             try:
 
                 if gizlilik_ayari == 2:
@@ -189,15 +286,21 @@ def stealth_scan():
                 # "with open" bloğu işi bittiği mikro saniyede dosyayı kaydeder ve kapatır.
                 if log_satiri:
                     with open(dosya_yeri, "a", encoding="utf-8") as f:
+                        f.write(f"Tahmini İşletim Sistemi = {tahmini_os}")
                         f.write(log_satiri + "\n")
 
             except Exception as e:
                 continue
 
-        print(f"\n[+] --- Sinsi Tarama Tamamlandı. Tüm sonuçlar masaüstünde '{dosya_adi}' dosyasına kaydedildi. ---")
+        bitis=time.time()
+        aradaki_fark=bitis-simdi
+        gecen_sure=str(timedelta(seconds=int(aradaki_fark)))
+        print(f"\nSinsi Tarama Tamamlandı. Tüm sonuçlar masaüstünde '{dosya_adi}' dosyasına kaydedildi. ---")
+        print(f"Tahmini işletim sistemi = {tahmini_os}")
+        print(f"Tarama süresi = {gecen_sure}")
 
 if __name__ == "__main__":
     try:
         stealth_scan()
     except PermissionError:
-        print("\n[!] HATA: Bu programı çalıştırmak için lütfen terminali YÖNETİCİ (Administrator) olarak açın!")
+        print("\nHATA: Bu programı çalıştırmak için lütfen terminali YÖNETİCİ (Administrator) olarak açın!")
