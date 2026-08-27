@@ -1,0 +1,146 @@
+from scapy.all import IP, TCP, sr1, send
+import sys
+import os
+
+def stealth_scan():
+    print("=== PROFESYONEL SYN STEALTH SCANNER ===")
+    
+    while True:
+        portlar = []
+        try:
+            hedef_ip = input("\nTaramak istediğin IP adresi (Çıkış için -1): ")
+            if hedef_ip == "-1":
+                print("Çıkış yapılıyor...")
+                break
+        except Exception as e:
+            print(f"Hata = {e}. Lütfen geçerli bir IP girin!")
+            continue
+
+        # LOG DOSYASI HAZIRLIĞI
+        # Girilen IP adına göre bir dosya ismi oluşturuyoruz (Örn: 127.0.0.1_rapor.txt)
+        dosya_adi = f"{hedef_ip}_rapor.txt"
+        ana_dizin = os.path.expanduser("~")
+        dosya_yeri=os.path.join(ana_dizin, "Desktop",dosya_adi)
+
+        if not os.path.exists(os.path.join(ana_dizin, "Desktop")):
+            dosya_yeri = os.path.join(ana_dizin, "Masaüstü", dosya_adi)
+
+        # Eğer dosya zaten varsa eski verilerle karışmasın diye siliyoruz, temiz bir sayfa açıyoruz
+        if os.path.exists(dosya_yeri):
+            os.remove(dosya_yeri)
+
+        while True:
+            print("2 port arası tarama (1)")
+            print("Belirli portları tarama (2)")
+            print("En popüler 100 portu tarama (3)")
+            print("Tüm portları tarama (4)")
+
+            try:
+                secim=int(input("="))
+            except ValueError:
+                print("Lütfen sayısal veri giriniz.")
+                continue
+
+            if secim == 1:
+                try:
+                    ilk_port=int(input("İlk portu giriniz:"))
+                    ikinci_port=int(input("İkinci portu giriniz:"))
+                    if ilk_port<0 or ikinci_port<0:
+                        print("Seçim en az 0 olmalıdır!")
+                        continue
+                except ValueError:
+                    print("Lütfen sayısal veri giriniz.")
+                    continue
+                min_port=min(ilk_port, ikinci_port)
+                max_port=max(ilk_port, ikinci_port)
+                for port in range(min_port, max_port+1):
+                    portlar.append(port)
+                break
+
+            elif secim == 2:
+                while True:
+                    try:
+                        belirli_portlar=int(input("Taranacak belirli portları girin (çıkış için -1):"))
+                        if belirli_portlar == -1 and len(portlar)==0:
+                            print("Henüz port girilmemiş!")
+                            continue
+                        elif belirli_portlar == -1 and len(portlar)>0:
+                            print("Çıkış yapılıyor...")
+                            break
+                        elif belirli_portlar<0 or belirli_portlar>65535:
+                            print("Port numaraları 0-65535 arasında olmalı!")
+                            continue
+                        else:
+                            portlar.append(belirli_portlar)
+                            continue
+                    except ValueError:
+                        print("Lütfen sayısal veri giriniz.")
+                        continue
+                break
+
+            elif secim == 3:
+                portlar+=[
+                    1, 5, 7, 9, 11, 13, 17, 18, 19, 20, 
+                    21, 22, 23, 25, 37, 42, 43, 49, 53, 67, 
+                    68, 69, 70, 79, 80, 88, 101, 102, 107, 109, 
+                    110, 111, 113, 115, 117, 118, 119, 123, 135, 137, 
+                    138, 139, 143, 156, 161, 162, 179, 194, 201, 220, 
+                    389, 443, 444, 445, 464, 465, 500, 513, 514, 515, 
+                    520, 530, 543, 544, 546, 547, 554, 587, 631, 636, 
+                    873, 990, 992, 993, 995, 1080, 1433, 1434, 1521, 2049, 
+                    2375, 2376, 3306, 3389, 3690, 4444, 5000, 5060, 5432, 5672, 
+                    5900, 6379, 8000, 8080, 8443, 8888, 9000, 9200, 9300, 27017
+                ]
+                break
+
+            elif secim == 4:
+                for i in range(65536):
+                    portlar.append(i)
+                break
+            else:
+                print("Seçenek bulunamadı!")
+                continue
+        
+        print(f"\n[+] {hedef_ip} için sinsi tarama başlatıldı...")
+        print(f"[+] Sonuçlar anlık olarak '{dosya_adi}' dosyasına kaydediliyor.\n")
+
+        for port in portlar:
+            try:
+                syn_paketi = IP(dst=hedef_ip) / TCP(dport=port, flags="S")
+                cevap = sr1(syn_paketi, timeout=0.1, verbose=0)
+                
+                log_satiri = "" # Dosyaya yazılacak metni tutacak değişken
+
+                if cevap is None:
+                    log_satiri = f"Port {port} | FİLTRELENDİ (FİREWALL VAR) 🛡️"
+                    print(f"-> {log_satiri}")
+                
+                elif cevap.haslayer(TCP):
+                    bayraklar = int(cevap.getlayer(TCP).flags)
+                    if (bayraklar & 0x12) == 0x12:
+                        log_satiri = f"Port {port} | AÇIK 🟢"
+                        print(f"-> {log_satiri}")
+                        
+                        rst_paketi = IP(dst=hedef_ip) / TCP(dport=port, flags="R")
+                        send(rst_paketi, verbose=0)
+                        
+                    elif (bayraklar & 0x04):
+                        log_satiri = f"Port {port} | KAPALI 🔴"
+                        print(f"-> {log_satiri}")
+
+                # Her port işleminde dosyayı "a" (append - sonuna ekle) modunda açıyoruz.
+                # "with open" bloğu işi bittiği mikro saniyede dosyayı kaydeder ve kapatır.
+                if log_satiri:
+                    with open(dosya_yeri, "a", encoding="utf-8") as f:
+                        f.write(log_satiri + "\n")
+
+            except Exception as e:
+                continue
+
+        print(f"\n[+] --- Sinsi Tarama Tamamlandı. Tüm sonuçlar masaüstünde '{dosya_adi}' dosyasına kaydedildi. ---")
+
+if __name__ == "__main__":
+    try:
+        stealth_scan()
+    except PermissionError:
+        print("\n[!] HATA: Bu programı çalıştırmak için lütfen terminali YÖNETİCİ (Administrator) olarak açın!")
