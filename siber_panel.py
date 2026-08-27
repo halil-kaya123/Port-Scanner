@@ -2,73 +2,77 @@ from scapy.all import IP, TCP, sr1, send
 from scapy.layers.l2 import ARP, Ether
 from scapy.sendrecv import srp
 from datetime import timedelta
-import urllib.request
+import ipaddress
 import random
 import socket
 import time
+import sys
 import os
+
+# Windows işletim sistemlerinde gerçek Masaüstü yolunu Registry üzerinden çeken kurumsal koruma
+def get_windows_desktop_path():
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders")
+        path, _ = winreg.QueryValueEx(key, "Desktop")
+        return os.path.expandvars(path)
+    except Exception:
+        # Windows dışı işletim sistemleri (Linux/macOS) için evrensel yedek yol
+        ana_dizin = os.path.expanduser("~")
+        yedek_yol = os.path.join(ana_dizin, "Desktop")
+        if not os.path.exists(yedek_yol):
+            yedek_yol = os.path.join(ana_dizin, "Masaüstü")
+        return yedek_yol
 
 def agi_tara(hedef_blok):
     print(f"\n{hedef_blok} ağı taranıyor, lütfen bekleyin...")
     try:
+        # Girdinin geçerli bir network bloğu olup olmadığını endüstri standartlarında doğruluyoruz
+        ipaddress.ip_network(hedef_blok, strict=False)
+        
         arp_istegi = ARP(pdst=hedef_blok)
         yayin_katmani = Ether(dst="ff:ff:ff:ff:ff:ff")
         tam_paket = yayin_katmani / arp_istegi
-        cevaplanan_listesi = srp(tam_paket, timeout=3, verbose=False)[0]
-    except Exception:
-        print("Tarama sırasında sistemsel hata oldu.")
+        cevaplanan_listesi = srp(tam_paket, timeout=3, verbose=False)[0] # Sadece cevaplanan paket havuzunu alıyoruz
+    except ValueError:
+        print("HATA: Geçersiz ağ bloğu formatı! (Örn: 192.168.1.0/24)")
+        return
+    except socket.error as e:
+        print(f"Ağ soket hatası oluştu: {e}")
+        return
+    except Exception as e:
+        print(f"Tarama sırasında beklenmedik bir sistem hatası oluştu: {e}")
         return
 
-    # Sütunları genişleterek ÜRETİCİ bilgisi tabloya eklendi
-    print(f"\n{'IP ADRESİ':<18}{'MAC ADRESİ':<20}{'CİHAZ ADI (HOSTNAME)':<22}{'ÜRETİCİ'}")
-    print("-" * 85)
+    print(f"\n{'IP ADRESİ':<18}{'MAC ADRESİ':<20}{'CİHAZ ADI (HOSTNAME)'}")
+    print("-" * 65)
 
     cihaz_sayisi = 0
     for gonderilen, alinan in cevaplanan_listesi:
         ip_adresi = alinan.psrc
         mac_adresi = alinan.hwsrc
 
-        # 1. ADIM: Hostname Çözümleme
         try:
             isim_cozumleme = socket.gethostbyaddr(ip_adresi)
             cihaz_ismi = isim_cozumleme[0]
         except (socket.herror, socket.gaierror):
             cihaz_ismi = "Bilinmeyen cihaz"
 
-        # 2. ADIM: MAC Adresinden Marka Bulma
-        ureti_firma = "Bilinmiyor"
-        try:
-            # macvendors.com API'sine istek atıyoruz (Kayıt/Key gerektirmez)
-            url = f"https://api.macvendors.com/{mac_adresi}"
-            istek = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            
-            # API saniyede en fazla 1 isteğe izin verdiği için ağı yormadan hızlıca okuyoruz
-            with urllib.request.urlopen(istek, timeout=2) as response:
-                ureti_firma = response.read().decode('utf-8')
-        except Exception:
-            # API sınırına takılırsa veya MAC adresi yerel/özel ise "Bilinmiyor" olarak kalır
-            ureti_firma = "Bilinmeyen Marka"
-
-        # Bulguları yeni sütun düzenine göre ekrana basıyoruz
-        print(f"{ip_adresi:<18}{mac_adresi:<20}{cihaz_ismi:<22} {ureti_firma}")
+        print(f"{ip_adresi:<18}{mac_adresi:<20}{cihaz_ismi}")
         cihaz_sayisi += 1
-        
-        # API'nin saniye sınırına takılmamak için her cihaz arasında çok küçük bir duraklama koyuyoruz
-        time.sleep(0.5)
 
     print(f"\nTarama tamamlandı. Ağda {cihaz_sayisi} tane aktif cihaz bulundu.\n")
 
-
 def baslat():
-    print("\nYEREL AĞ TARAYICI\n")
+    print("\nAğ Keşifi")
     while True:
         try:
             print("Taramak istediğiniz ağ bloğunu girin.")
             print("Örnek formatlar: 192.168.1.0/24 veya 10.0.0.0/24.")
-            hedef_blok = input("Ağ Bloğu (çıkış için -1):").strip()
+            hedef_blok = input("Ağ Bloğu (Çıkış için -1): ").strip()
 
-            if hedef_blok=="-1":
-                print("Çıkış yapılıyor...\n")
+            if hedef_blok == "-1":
+                print("Ağ tarayıcıdan çıkış yapılıyor...")
                 break
 
             if not hedef_blok:
@@ -78,68 +82,55 @@ def baslat():
             agi_tara(hedef_blok)
 
         except KeyboardInterrupt:
-            print("Kullanıcı tarafından kesildi.")
+            print("\nKullanıcı tarafından kesildi.")
             break
         except Exception as e:
             print(f"Hata: {e}. Lütfen kontrol edin.")
             continue
 
 def stealth_scan():
-    risk_veritabanı = {
-        21:   "FTP servisi aktif. Şifreleme kullanılmıyorsa kimlik doğrulama verileri açık iletilebilir.",
-        22:   "Servis aktif. Kaba kuvvet (Brute Force) girişimlerine karşı önlem alınması önerilir.",
-        23:   "Servis aktif. Güvenli olmayan protokol kullanımı; SSH geçişi önerilir.",
-        25:   "E-posta servisi aktif. Açık röle (Open Relay) yapılandırması kontrol edilmelidir.",
-        53:   "DNS servisi aktif. Bölge transferi (Zone Transfer) izinleri incelenmelidir.",
-        80:   "HTTP web sunucusu aktif. Yazılım sürüm zafiyetleri kontrol edilmelidir.",
-        110:  "POP3 servisi aktif. Şifreleme kullanılmıyorsa kimlik doğrulama verileri açık iletilebilir.",
-        135:  "Windows RPC servisi aktif. Ağ içi erişim izinleri sınırlandırılmalıdır.",
-        139:  "NetBIOS servisi aktif. Dosya paylaşım izinleri denetlenmelidir.",
-        443:  "HTTPS güvenli web sunucusu aktif. SSL/TLS sertifika ve şifreleme algoritmaları incelenmelidir.",
-        445:  "Windows SMB servisi aktif. Güncel güvenlik yamalarının (MS17-010 vb.) doğrulanması önerilir.",
-        1433: "MSSQL veritabanı servisi aktif. Varsayılan yetkili hesap şifreleri gözden geçirilmelidir.",
-        3306: "MySQL veritabanı servisi aktif. Dış ağ erişim kuralları sınırlandırılmalıdır.",
-        3389: "Windows RDP (Uzak Masaüstü) aktif. Ağ seviyesinde kimlik doğrulama (NLA) önerilir.",
-        8080: "Alternatif HTTP sunucusu aktif. Test veya yönetim panellerinin varlığı incelenmelidir."
-    }
-
     while True:
-        print("Ağ taraması yapılsın mı? (e/h)")
-        secim=input("=").lower()
-        if secim=="e" or secim=="evet" or secim=="yes" or secim=="1":
+        print("Ağ keşif taraması yapılsın mı? (e/h)")
+        secim = input("=").lower().strip()
+        if secim=="e" or secim=="evet" or secim=="yes" or secim=="y" or secim=="1":
             baslat()
             break
-        elif secim=="h" or secim=="hayır" or secim=="no" or secim=="0":
-            print("Ağ taraması yapılmayacak\n")
+        elif secim=="h" or secim=="hayır" or secim=="n" or secim=="no" or secim=="0":
+            print("Ağ keşfi atlandı, doğrudan port taramaya geçiliyor.\n")
             break
         else:
-            print("Seçim bulunamadı")
-
-    print("Personal Network Security Scanner")
+            print("Geçersiz seçim, lütfen e veya h giriniz.")
+            
+    print("\nPersonal Network Security Scanner")
     
     while True:
         portlar = []
         try:
-            hedef_ip = input("\nTaramak istediğin IP adresi (Çıkış için -1): ")
+            hedef_input = input("\nTaramak istediğin IP adresi (Çıkış için -1): ").strip()
 
-            if hedef_ip == "-1":
+            if hedef_input == "-1":
                 print("Çıkış yapılıyor...")
                 break
 
+            if not hedef_input:
+                print("Lütfen geçerli bir IP girin!")
+                continue
+
+            # Gelişmiş IP Doğrulama (ipaddress entegrasyonu)
+            hedef_ip = str(ipaddress.ip_address(hedef_input))
+
+        except ValueError:
+            print("HATA: Geçersiz IP adresi formatı! Lütfen tekrar deneyin.")
+            continue
         except Exception as e:
             print(f"Hata = {e}. Lütfen geçerli bir IP girin!")
             continue
 
-        # LOG DOSYASI HAZIRLIĞI
-        # Girilen IP adına göre bir dosya ismi oluşturuyoruz (Örn: 127.0.0.1_rapor.txt)
+        # KORUMALI MASAÜSTÜ YOLU YÜKLEMESİ
         dosya_adi = f"{hedef_ip}_rapor.txt"
-        ana_dizin = os.path.expanduser("~")
-        dosya_yeri=os.path.join(ana_dizin, "Desktop",dosya_adi)
+        desktop_path = get_windows_desktop_path()
+        dosya_yeri = os.path.join(desktop_path, dosya_adi)
 
-        if not os.path.exists(os.path.join(ana_dizin, "Desktop")):
-            dosya_yeri = os.path.join(ana_dizin, "Masaüstü", dosya_adi)
-
-        # Eğer dosya zaten varsa eski verilerle karışmasın diye siliyoruz, temiz bir sayfa açıyoruz
         if os.path.exists(dosya_yeri):
             os.remove(dosya_yeri)
 
@@ -151,65 +142,57 @@ def stealth_scan():
             print("Tüm portları tarama (4)")
 
             try:
-                secim=int(input("="))
+                secim = int(input("="))
             except ValueError:
                 print("Lütfen sayısal veri giriniz.")
                 continue
 
             if secim == 1:
                 try:
+                    ilk_port = int(input("İlk portu giriniz: "))
+                    ikinci_port = int(input("İkinci portu giriniz: "))
 
-                    ilk_port=int(input("İlk portu giriniz:"))
-                    ikinci_port=int(input("İkinci portu giriniz:"))
-
-                    if ilk_port<0 or ikinci_port<0:
-                        print("Seçim en az 0 olmalıdır!")
+                    if ilk_port < 1 or ikinci_port < 1:
+                        print("Port numaraları en az 1 olmalıdır!")
                         continue
-
                     elif ilk_port>65535 or ikinci_port>65535:
-                        print("Seçim maksimum 65535 olmalıdır!")
+                        print("Port numarası maksimum 65535 olmalıdır!")
                         continue
-
                 except ValueError:
                     print("Lütfen sayısal veri giriniz.")
                     continue
 
-                min_port=min(ilk_port, ikinci_port)
-                max_port=max(ilk_port, ikinci_port)
+                min_port = min(ilk_port, ikinci_port)
+                max_port = max(ilk_port, ikinci_port)
 
-                for port in range(min_port, max_port+1):
+                for port in range(min_port, max_port + 1):
                     portlar.append(port)
-
                 break
 
             elif secim == 2:
                 while True:
                     try:
-                        belirli_portlar=int(input("Taranacak belirli portları girin (çıkış için -1):"))
+                        belirli_portlar = int(input("Taranacak belirli portları girin (Çıkış için -1): "))
 
-                        if belirli_portlar == -1 and len(portlar)==0:
+                        if belirli_portlar == -1 and len(portlar) == 0:
                             print("Henüz port girilmemiş!")
                             continue
-
-                        elif belirli_portlar == -1 and len(portlar)>0:
-                            print("Çıkış yapılıyor...")
+                        elif belirli_portlar == -1 and len(portlar) > 0:
+                            print("Port girişleri tamamlandı.")
                             break
-
-                        elif belirli_portlar<0 or belirli_portlar>65535:
-                            print("Port numaraları 0-65535 arasında olmalı!")
+                        elif belirli_portlar < 1 or belirli_portlar > 65535:
+                            print("Port numaraları 1-65535 arasında olmalı!")
                             continue
-
                         else:
                             portlar.append(belirli_portlar)
-                            continue
-
                     except ValueError:
                         print("Lütfen sayısal veri giriniz.")
                         continue
                 break
 
             elif secim == 3:
-                portlar+=[
+                # Tam olarak 100 adet endüstri standardı popüler port listesi
+                portlar += [
                     1, 5, 7, 9, 11, 13, 17, 18, 19, 20, 
                     21, 22, 23, 25, 37, 42, 43, 49, 53, 67, 
                     68, 69, 70, 79, 80, 88, 101, 102, 107, 109, 
@@ -224,41 +207,38 @@ def stealth_scan():
                 break
 
             elif secim == 4:
-                for i in range(1,65536):
+                # Endüstri standardı olan 1-65535 aralığı (Port 0 taranmaz)
+                for i in range(1, 65536):
                     portlar.append(i)
                 break
-
             else:
                 print("Seçenek bulunamadı!")
                 continue
 
         while True:
-
             print("\nGizlilik ve Hız Ayarı\n")
-            print("1-) Agresif ayar (Hızlı ancak aşırı gürültülü)")
-            print("2-) Dengeli ayar (Normal hız, orta gürültülü)")
-            print("3-) Sinsi ayar (Çok yavaş ancak aşırı gizli ve az gürültülü)")
+            print("1-) Yüksek Trafik Ayarı (Hızlı ancak ağda gürültülü)")
+            print("2-) Dengeli Ayar (Normal hız, orta derece gecikmeli)")
+            print("3-) Düşük Trafik Ayarı (Çok yavaş, güvenlik mekanizmalarını atlatmaya yönelik)")
 
             try:
-                gizlilik_ayari=int(input("="))
+                gizlilik_ayari = int(input("="))
 
                 if gizlilik_ayari < 1 or gizlilik_ayari > 3:
                     print("1-3 arası değer giriniz lütfen")
                     continue
-                
-                elif gizlilik_ayari>1:
+                elif gizlilik_ayari > 1:
                     random.shuffle(portlar)
-
                 break
-            
             except ValueError:
                 print("Lütfen sayısal veri giriniz.")
                 continue
         
         print(f"\n{hedef_ip} için tarama başlatıldı...")
         print(f"Sonuçlar anlık olarak '{dosya_adi}' dosyasına kaydediliyor.\n")
-        simdi=time.time()
+        simdi = time.time()
 
+        # TEK SEFERLİK İŞLETİM SİSTEMİ TESPİTİ (TTL ANALİZİ)
         tahmini_os = "Belirlenemedi (Yanıt Alınamadı)"
         try:
             os_paketi = IP(dst=hedef_ip) / TCP(dport=80, flags="S")
@@ -275,16 +255,39 @@ def stealth_scan():
         except Exception:
             pass
 
-                # Rapor dosyasının en tepesindeki tablo başlığı düzenlemesi
+        # TARAFSIZ SİBER GÜVENLİK REFERANS VERİTABANI
+        risk_veritabanı = {
+            21:   "Servis aktif. Kimlik doğrulama verilerinin şifresiz iletildiği bilinmektedir.",
+            22:   "Servis aktif. Kaba kuvvet (Brute Force) girişimlerine karşı önlem alınması önerilir.",
+            23:   "Servis aktif. Güvenli olmayan protokol kullanımı; SSH geçişi önerilir.",
+            25:   "E-posta servisi aktif. Açık röle (Open Relay) yapılandırması kontrol edilmelidir.",
+            53:   "DNS servisi aktif. Bölge transferi (Zone Transfer) izinleri incelenmelidir.",
+            80:   "HTTP web sunucusu aktif. Yazılım sürüm zafiyetleri kontrol edilmelidir.",
+            110:  "POP3 e-posta servisi aktif. Şifrelerin temiz metin geçişi incelenmelidir.",
+            135:  "Windows RPC servisi aktif. Ağ içi erişim izinleri sınırlandırılmalıdır.",
+            139:  "NetBIOS servisi aktif. Dosya paylaşım izinleri denetlenmelidir.",
+            443:  "HTTPS güvenli web sunucusu aktif. SSL/TLS sertifika ve şifreleme algoritmaları incelenmelidir.",
+            445:  "Windows SMB servisi aktif. Güncel güvenlik yamalarının (MS17-010 vb.) doğrulanması önerilir.",
+            1433: "MSSQL veritabanı servisi aktif. Varsayılan yetkili hesap şifreleri gözden geçirilmelidir.",
+            3306: "MySQL veritabanı servisi aktif. Dış ağ erişim kuralları sınırlandırılmalıdır.",
+            3389: "Windows RDP (Uzak Masaüstü) aktif. Ağ seviyesinde kimlik doğrulama (NLA) önerilir.",
+            8080: "Alternatif HTTP sunucusu aktif. Test veya yönetim panellerinin varlığı incelenmelidir."
+        }
+
+        # RAPOR BAŞLIĞI VE ÖNEMLİ YASAL UYARI MANTIĞI
         with open(dosya_yeri, "w", encoding="utf-8") as f:
             f.write(f"PERSONAL NETWORK SECURITY SCANNER REPORT\n")
+            f.write(f"ÖNEMLİ NOT: Bu rapor yalnızca hedef sistem üzerindeki açık veya aktif\n")
+            f.write(f"servisleri listeler. Bir portun 'OPEN' (Açık) olması doğrudan bir siber güvenlik açığı\n")
+            f.write(f"olduğu anlamına gelmez. Yapılandırma detayları ayrıca incelenmelidir.\n")
+            f.write(f"---------------------------------------------------------------------------------\n")
             f.write(f"Hedef IP Adresi          = {hedef_ip}\n")
-            f.write(f"Tahmini İşletim Sistemi  = {tahmini_os} (TTL Analizi)\n")
+            f.write(f"Tahmini İşletim Sistemi  = {tahmini_os} (TTL tabalı tahmin)\n")
             f.write(f"Tarama Başlangıç Zamanı  = {time.strftime('%d/%m/%Y %H:%M:%S')}\n")
             f.write(f"Tarama Modu              = Mod {gizlilik_ayari}\n")
-            f.write("-" * 125 + "\n")
-            f.write(f"{'PORT':<10}{'DURUM':<15}{'MUHTEMEL SERVİS':<18}{'CANLI BANNER (YAZILIM SÜRÜMÜ)':<35}{'GÜVENLİK TAVSİYESİ / NOTU'}\n")
-            f.write("-" * 125 + "\n")
+            f.write("-" * 135 + "\n")
+            f.write(f"{'PORT':<10}{'DURUM':<24}{'MUHTEMEL SERVİS':<18}{'CANLI BANNER (YAZILIM SÜRÜMÜ)':<35}{'GÜVENLİK TAVSİYESİ / NOTU'}\n")
+            f.write("-" * 135 + "\n")
 
         # PORT TARAMA DÖNGÜSÜ
         for port in portlar:
@@ -299,19 +302,19 @@ def stealth_scan():
                 syn_paketi = IP(dst=hedef_ip) / TCP(dport=port, flags="S")
                 cevap = sr1(syn_paketi, timeout=timeout_ayari, verbose=0)
                 
-                durum = "FILTERED / YANIT YOK"
+                durum = "NO RESPONSE / POSSIBLY FILTERED"
                 muhtemel_servis = "Bilinmiyor"
-                canlı_banner = "Alınamadı"
+                canlı_banner = "Alınamadı / Yanıt Yok"
                 tavsiye_notu = risk_veritabanı.get(port, "Servis yapılandırmasının ve erişim izinlerinin incelenmesi önerilir.")
-
+                
                 try:
                     muhtemel_servis = socket.getservbyport(port).upper()
-                except Exception:
+                except (OSError, socket.error):
                     pass
 
-                # SENARYO A: YANIT YOK / FİLTRELİ
+                # SENARYO A: YANIT YOK (FILTERED OLABİLİR)
                 if cevap is None:
-                    durum = "NO PESPONSE / FILTERED"
+                    durum = "NO_RESP / POSS_FILTERED"
                     tavsiye_notu = "Paket yanıtı alınamadı; ağ engeli, drop durumu veya host durumu kontrol edilmelidir."
                 
                 # SENARYO B: YANIT GELDİ
@@ -321,6 +324,7 @@ def stealth_scan():
                     # PORT AÇIK (SYN-ACK ALINDI)
                     if (bayraklar & 0x12) == 0x12:
                         durum = "OPEN"
+                        canlı_banner = "Banner Alınamadı"
                         
                         # Banner Grabbing (Sürüm Yakalama) Alanı
                         try:
@@ -331,8 +335,8 @@ def stealth_scan():
                             if banner:
                                 canlı_banner = banner.decode('utf-8', errors='ignore').strip().replace('\r', '').replace('\n', ' ')
                             s.close()
-                        except Exception as e:
-                            canlı_banner = f"Bağlantı Açık (Veri Okunamadı)"
+                        except (socket.timeout, socket.error) as e:
+                            canlı_banner = f"TCP bağlantısı başarılı; banner alınamadı"
 
                         # El sıkışmayı sonlandırıp kaçıyoruz (Stealth)
                         rst_paketi = IP(dst=hedef_ip) / TCP(dport=port, flags="R")
@@ -343,12 +347,12 @@ def stealth_scan():
                         durum = "CLOSED"
                         tavsiye_notu = "Port kapalı durumdadır."
 
-                # Konsol ekranına basma kuralları (Kapalı portlar ekranda kalabalık yapmasın diye süzülür)
+                # Konsol ekranına basma kuralları (Kapalı portlar süzülür)
                 if durum != "CLOSED":
-                    print(f"-> Port {port:<5} | Durum: {durum:<10} | Service: {muhtemel_servis:<12} | Banner: {canlı_banner[:25]}")
+                    print(f"-> Port {port:<5} | Durum: {durum:<24} | Service: {muhtemel_servis:<12} | Banner: {canlı_banner[:25]}")
 
                     # Sütun hizalamalı TXT rapor satırı oluşturma
-                    log_satiri = f"{port:<10}{durum:<15}{muhtemel_servis:<18}{canlı_banner:<35}{tavsiye_notu}"
+                    log_satiri = f"{port:<10}{durum:<24}{muhtemel_servis:<18}{canlı_banner:<35}{tavsiye_notu}"
                     
                     with open(dosya_yeri, "a", encoding="utf-8") as f:
                         f.write(log_satiri + "\n")
@@ -356,9 +360,11 @@ def stealth_scan():
             except KeyboardInterrupt:
                 print("\nTarama Kullanıcı Tarafından Durduruldu.")
                 break
+            except socket.error as se:
+                print(f"Port {port} için ağ hatası: {se}")
+                continue
             except Exception as e:
-                # Hatalar sessizce geçiştirilmiyor, konsola debug çıktısı basılıyor
-                print(f"Port {port} taranırken sistemsel bir hata oluştu: {e}")
+                print(f"Port {port} taranırken beklenmedik hata oluştu: {e}")
                 continue
 
         bitis = time.time()
@@ -372,10 +378,13 @@ def stealth_scan():
         # Rapor sonu özeti ekleme
         with open(dosya_yeri, "a", encoding="utf-8") as f:
             f.write("-" * 125 + "\n")
-            f.write(f"Tarama Süresi = {gecen_sure}\n")
+            f.write(f"Tarama Tamamlanma Süresi = {gecen_sure}\n")
 
 if __name__ == "__main__":
-    try:
-        stealth_scan()
-    except PermissionError:
-        print("\nHATA: Bu programı çalıştırmak için lütfen terminali YÖNETİCİ (Administrator) olarak açın!")
+    # Windows platform kontrolü ve yönetici yetki sorgusu
+    if os.name == 'nt':
+        import ctypes
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            print("\nHATA: Bu programı çalıştırmak için lütfen terminali YÖNETİCİ (Administrator) olarak açın!")
+            sys.exit()
+    stealth_scan()
