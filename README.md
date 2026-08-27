@@ -1,86 +1,529 @@
-# Advanced NetScanner & SYN Stealth Port Scanner Suite
+# Advanced NetScanner & SYN Port Scanner Suite
 
-Bu proje; yerel ağ haritalandırma, cihaz üreticisi analizi (Vendor Lookup), hedef işletim sistemi tahmini (OS Fingerprinting) ve güvenlik duvarlarını (Firewall) atlatarak açık kapıları tespit eden **Yarım Açık Tarama (SYN Stealth Scan)** özelliklerini tek bir çatıda birleştiren bağımsız bir siber güvenlik ve ağ keşif framework'üdür.
+Bu proje; yerel ağ keşfi, TCP SYN port taraması, temel servis tanımlama, işletim sistemi tahmini ve anlaşılabilir TXT raporlamayı tek bir Python aracında birleştiren eğitim amaçlı bir ağ güvenliği ve keşif aracıdır.
+
+> **Proje durumu:** Erken geliştirme aşamasında  
+> **Geliştirici:** 14 yaşında Bilişim ve Ağ Teknolojileri öğrencisi  
+> **Ana teknoloji:** Python + Scapy
 
 ---
 
 ## Geliştirici Notu ve Projenin Amacı
 
-Ben **14 yaşında bir Bilişim ve Ağ Teknolojileri öğrencisiyim**. Bu aracı, VirtualBox laboratuvarımda Kali Linux, Windows 11 ve siber güvenlik zafiyetli makineler (Metasploitable vb.) arasında sızma testleri (pentest) yaparken, standart tarayıcıların ağda bıraktığı gürültülü izleri (log) azaltmak, Firewall cihazlarının çalışma mantığını (Paket Drop/Filtreleme) ve ağ protokollerini pratik olarak anlamak için bağımsız bir script olarak geliştirdim.
+Ben **14 yaşında bir Bilişim ve Ağ Teknolojileri öğrencisiyim**.
 
-**Dürüstlük Bildirimi:** Kullanıcı arayüzünü, hata yönetimini (`try-except`), sonsuz menü döngülerini, yerel ağ tarama mantığını, raporlama optimizasyonunu ve tüm portları (65.536 adet) tarama algoritmasını tamamen kendi zihnimle kodladım. Ancak standart `socket` kütüphanesinin yetersiz kaldığı donanım katmanında, ham TCP/ARP paketlerini manipüle etmek için **Scapy** kütüphanesinin entegrasyonu, bit maskeleme mimarisi ve harici API entegrasyonları konusunda yapay zekadan bir **mühendislik asistanı** gibi teknik destek aldım.
+Bu projeyi ağ protokollerini, TCP/IP yapısını, port taramasını, ARP keşfini, firewall davranışlarını ve temel siber güvenlik kavramlarını pratik olarak öğrenmek amacıyla geliştirmeye başladım.
 
----
+Proje başlangıçta yaklaşık 70 satırlık basit bir SYN port tarayıcısıydı. Zaman içerisinde ağ keşfi, IP doğrulama, servis tespiti, TTL tabanlı işletim sistemi tahmini, banner alma, güvenlik tavsiyeleri, raporlama ve hata yönetimi gibi özellikler eklenmiştir.
 
-## Teknik Özellikler & Siber Güvenlik Anatomisi
+Bazı teknik konularda yapay zekâdan bir mühendislik asistanı olarak destek alınmıştır. Özellikle Scapy kullanımı, ham paket işlemleri, hata yönetimi ve bazı Python uygulama ayrıntılarında AI desteğinden yararlanılmıştır.
 
-### 1. Keşif Modülü (Yerel Ağ Tarayıcı)
-*   **Asenkron ARP Sweep:** Belirlenen ağ bloğuna (Örn: `/24`) anlık asenkron ARP anonsları fırlatarak ağdaki tüm canlı cihazları, MAC adreslerini ve Hostname (Cihaz adı) bilgilerini 3 saniye gibi kısa bir sürede haritalandırır.
-*   **Dinamik Vendor Lookup:** Bulunan cihazların MAC adreslerini anlık olarak ücretsiz MacVendors API'si üzerinden sorgulayarak cihazların fiziksel markalarını (Apple, Samsung, Intel, Huawei vb.) tespit eder.
-
-### 2. Tarama Modülü (SYN Stealth Scan)
-*   **Yarım Açık Tarama:** Standart 3 adımlı TCP el sıkışmasını (Three-Way Handshake) tamamlamaz. Hedef porttan `SYN-ACK` sinyali geldiği an portun **AÇIK** olduğunu anlar ve el sıkışmayı bitirmeden hemen bir `RST` (Reset) paketi fırlatarak kaçar. Bu sayede hedef sistemde uygulama seviyesinde log bırakmaz.
-*   **Dinamik Gizlilik ve Hız Kademeleri:** 
-    *   *Agresif Mod:* 0.1s timeout ile jet hızında tarama yapar.
-    *   *Dengeli Mod:* Portları karıştırır, araya 0.5-2s rastgele gecikmeler koyar.
-    *   *Sinsi Mod:* Portları tamamen çorba yapar (`shuffle`), araya 5-10s geniş ve ritmik olmayan rastgele gecikmeler koyarak modern Saldırı Tespit Sistemlerinin (IDS/IPS) ve Akıllı Firewall'ların `Rate Limiting` (Hız Sınırı) kurallarını bypass eder.
-*   **Bit Maskeleme Teknolojisi:** Karşıdan dönen TCP bayraklarını string (metin) olarak değil, doğrudan işlemci seviyesinde çalışan **Bitwise AND (`bayraklar & 0x12`)** maskelemesiyle analiz eder. Bu sayede hatalı pozitif (false-positive) sonuçları sıfıra indirir.
-*   **Döngü Dışı OS Fingerprinting:** Tarama başında hedefe tek bir SYN paketi atarak dönen **TTL (Time to Live)** değerini analiz eder. Port döngüsünü kirletmeden, hedefin Windows, Linux/macOS veya Cisco bir cihaz olduğunu en başta tek seferde tahmin eder.
-
-### 3. Akıllı Raporlama & Kararlılık
-*   **Gelişmiş I/O Optimizasyonu:** Rapor dosyasının şişmesini engellemek için ana başlıkları tarama başında tek sefer yazar, döngü içinde sadece port bulgularını alt alta ekler.
-*   **Zaman Analizi:** Tarama bittiğinde projenin ne kadar sürdüğünü `00:02:15` (Saat:Dakika:Saniye) formatında profesyonelce raporun altına basar.
-*   **Kurşun Geçirmezlik:** İçindeki yoğun istisna yönetimleri sayesinde ağ anlık olarak kopsa veya Scapy sistemsel thread hataları fırlatsa bile program kilitlenmez, akışı sürdürür.
+Bu proje **Nmap'in alternatifi veya rakibi olarak tasarlanmamıştır**. Amacım, zaman içerisinde geliştirerek kullanıcıların ve siber güvenlik alanındaki kişilerin faydalı bulabileceği, sonuçları kolay anlaşılır şekilde sunan bir araç oluşturmaktır.
 
 ---
 
-## Dosya Yapısı
+# Teknik Özellikler
+
+## 1. Yerel Ağ Keşfi
+
+ARP tabanlı ağ keşfi ile aynı yerel ağ üzerindeki cevap veren cihazlar tespit edilebilir.
+
+Gösterilen bilgiler:
+
+- IP adresi
+- MAC adresi
+- Hostname / cihaz adı
+
+Örnek:
 
 ```text
-└── Eğitim/
-    ├── siber_panel.py              # Tüm sistemin birleşik ana kaynak kodu
-    └── [Hedef_IP]_rapor.txt        # Masaüstünde anlık üretilen detaylı rapor dosyası
+IP ADRESİ         MAC ADRESİ          CİHAZ ADI
+-------------------------------------------------------------
+192.168.1.1       XX:XX:XX:XX:XX:XX   router
+192.168.1.10      XX:XX:XX:XX:XX:XX   bilgisayar
+192.168.1.20      XX:XX:XX:XX:XX:XX   Bilinmeyen cihaz
 ```
+
+> ARP keşfi yerel ağ segmentleri için tasarlanmıştır.
 
 ---
 
-## Kurulum ve Çalıştırma Talimatı
+## 2. TCP SYN Port Taraması
 
-Aracın ham ağ paketleri enjekte edebilmesi için bilgisayarınızın ağ kartına doğrudan erişmesi, yani **Yönetici (Administrator / Sudo)** yetkileriyle çalıştırılması şarttır.
+Araç TCP SYN paketleri göndererek hedef TCP portlarının durumunu belirlemeye çalışır.
 
-### 1. Gerekli Kütüphanelerin Yüklenmesi
-Terminal veya komut satırını açarak Scapy kütüphanesini yükleyin:
+Temel sonuçlar:
+
+- `OPEN`
+- `CLOSED`
+- `NO_RESP / POSS_FILTERED`
+
+SYN-ACK yanıtı alınması portun açık olduğunu gösterir.
+
+RST veya RST-ACK yanıtı portun kapalı olduğunu gösterir.
+
+Herhangi bir yanıt alınamaması ise portun kesin olarak filtrelendiği anlamına gelmez. Firewall, paket kaybı, ağ yapılandırması veya hedef sistemin davranışı gibi farklı sebepler olabilir.
+
+---
+
+## 3. Port Tarama Seçenekleri
+
+Kullanıcı farklı tarama yöntemlerinden birini seçebilir:
+
+```text
+1 - İki port arasındaki aralık
+2 - Belirli portlar
+3 - Popüler port listesi
+4 - 1-65535 arasındaki TCP portları
+```
+
+Port numaraları `1-65535` aralığında doğrulanır.
+
+---
+
+## 4. Tarama Hızı
+
+Üç farklı tarama profili bulunmaktadır.
+
+### Yüksek Trafik Ayarı
+
+Daha kısa timeout değerleri kullanır.
+
+Avantaj:
+
+- Daha hızlı tarama
+
+Dezavantaj:
+
+- Daha fazla ağ trafiği oluşturabilir.
+- Hedef sistem tarafından daha kolay fark edilebilir.
+
+### Dengeli Ayar
+
+Hız ve trafik miktarı arasında denge sağlamayı amaçlar.
+
+Port sırası karıştırılabilir ve portlar arasında rastgele gecikmeler uygulanabilir.
+
+### Düşük Trafik Ayarı
+
+Daha uzun gecikmeler kullanarak taramayı daha yavaş gerçekleştirir.
+
+Amaç:
+
+- Trafik yoğunluğunu azaltmak
+- Daha kontrollü tarama yapmak
+
+> Bu mod herhangi bir IDS, IPS veya firewall sistemini kesin olarak aşmayı garanti etmez.
+
+---
+
+## 5. Servis Tanımlama
+
+Açık veya cevap veren portlar için standart servis tablosundan muhtemel servis adı alınmaya çalışılır.
+
+Örneğin:
+
+```text
+135  -> EPMAP
+139  -> NETBIOS-SSN
+443  -> HTTPS
+445  -> MICROSOFT-DS
+3306 -> MYSQL
+3389 -> MS-WBT-SERVER
+```
+
+Bu bilgiler kesin servis tespiti değildir. Port numarasına göre yapılan bir tahmindir.
+
+---
+
+## 6. Banner Okuma
+
+Açık TCP portlarına bağlantı kurulup başlangıç verisi okunmaya çalışılır.
+
+Servis bir banner gönderirse rapora eklenir.
+
+Örneğin:
+
+```text
+Apache/2.4.x
+OpenSSH_9.x
+Microsoft-IIS/10.0
+```
+
+Ancak birçok servis bağlantı kurulduğunda doğrudan banner göndermediği için:
+
+```text
+TCP bağlantısı başarılı; banner alınamadı
+```
+
+gibi bir sonuç alınması normaldir.
+
+---
+
+## 7. Temel İşletim Sistemi Tahmini
+
+Tarama başlangıcında alınan IP paketindeki TTL değeri analiz edilerek işletim sistemi hakkında temel bir tahmin yapılır.
+
+Örneğin:
+
+```text
+Tahmini İşletim Sistemi = Windows
+```
+
+veya:
+
+```text
+Tahmini İşletim Sistemi = Linux / Android / macOS
+```
+
+> TTL analizi kesin işletim sistemi tespiti değildir. NAT, proxy, ağ cihazları, özel yapılandırmalar veya değiştirilmiş TTL değerleri sonucu etkileyebilir.
+
+---
+
+# Güvenlik Referansları
+
+Araç, tespit edilen bazı servisler için kısa ve anlaşılır güvenlik notları gösterebilir.
+
+Örneğin:
+
+```text
+445/TCP OPEN
+
+Windows SMB servisi aktif.
+Güncel güvenlik yamalarının doğrulanması önerilir.
+```
+
+Bu bilgiler doğrudan güvenlik açığı tespiti anlamına gelmez.
+
+Örneğin bir portun:
+
+```text
+445/TCP OPEN
+```
+
+olması yalnızca ilgili TCP servisinin erişilebilir olduğunu gösterir.
+
+Gerçek bir güvenlik değerlendirmesi için servis sürümü, yapılandırma, erişim kontrolleri ve ilgili güvenlik kontrollerinin ayrıca incelenmesi gerekir.
+
+---
+
+# Raporlama
+
+Tarama sonuçları kullanıcıların kolay okuyabileceği `.txt` formatında raporlanır.
+
+Örnek:
+
+```text
+PERSONAL NETWORK SECURITY SCANNER REPORT
+
+Hedef IP Adresi          = 192.168.1.140
+Tahmini İşletim Sistemi  = Windows
+Tarama Modu              = Mod 1
+
+PORT      DURUM                    MUHTEMEL SERVİS
+------------------------------------------------------------
+135       OPEN                     EPMAP
+139       OPEN                     NETBIOS-SSN
+445       OPEN                     MICROSOFT-DS
+```
+
+Raporda ayrıca:
+
+- Hedef IP
+- Tahmini işletim sistemi
+- Tarama modu
+- Açık portlar
+- Port durumları
+- Muhtemel servisler
+- Banner bilgileri
+- Güvenlik tavsiyeleri
+- Tarama süresi
+
+gibi bilgiler bulunabilir.
+
+---
+
+# Dosya Yapısı
+
+Mevcut sürümde proje basit ve tek dosyalı bir yapıya sahiptir:
+
+```text
+Eğitim/
+│
+├── siber_panel.py
+│
+└── [Hedef_IP]_rapor.txt
+```
+
+Proje büyüdükçe modüler yapıya geçirilmesi planlanmaktadır.
+
+Örneğin gelecekte:
+
+```text
+project/
+│
+├── main.py
+│
+├── scanner/
+│   ├── syn_scanner.py
+│   ├── arp_scanner.py
+│   └── service_detection.py
+│
+├── detection/
+│   └── os_detection.py
+│
+├── reporting/
+│   └── txt_report.py
+│
+├── database/
+│   └── risk_database.py
+│
+└── utils/
+    └── validators.py
+```
+
+şeklinde daha düzenli bir mimariye geçilebilir.
+
+---
+
+# Kurulum
+
+## Gereksinimler
+
+- Python 3.x
+- Scapy
+
+Scapy kurulumu:
+
 ```bash
 pip install scapy
 ```
 
-### 2. İşletim Sistemine Göre Ön Gereksinimler
+---
 
-*   **Windows Kullanıcıları İçin:** Scapy'nin ham paket fırlatabilmesi için Windows arka planında bir paket yakalama motoruna ihtiyacı vardır. Eğer bilgisayarınızda yüklü değilse, ücretsiz ve güvenli olan **Npcap** yazılımını [buraya tıklayarak npcap.com üzerinden](https://npcap.com) indirip kurmanız gerekmektedir (Kurulum sırasında "Install Npcap in WinPcap API-compatible Mode" seçeneğinin işaretli olduğundan emin olun).
-*   **Linux / Kali Linux Kullanıcıları İçin:** Ek bir yazılıma gerek yoktur, direkt terminalden çalıştırılabilir.
+# Windows
 
-### 3. Aracın Başlatılması
+Windows üzerinde Scapy'nin ham paket işlemleri için Npcap gerekebilir.
 
-*   **Windows:** PowerShell veya Komut İstemi'ni (CMD) **Yönetici Olarak Çalıştır** seçeneğiyle açın ve kodun olduğu dizine giderek başlatın:
-    ```cmd
-    python siber_panel.py
-    ```
-*   **Linux / macOS:** Terminali açın ve `sudo` yetkisiyle aracı tetikleyin:
-    ```bash
-    sudo python3 siber_panel.py
-    ```
+Npcap:
+
+https://npcap.com/
+
+Npcap kurulduktan sonra PowerShell veya CMD'yi yönetici olarak açarak:
+
+```bash
+python siber_panel.py
+```
+
+komutuyla program çalıştırılabilir.
 
 ---
 
-## Nasıl Kullanılır? (Kullanım Senaryoları)
+# Linux / Kali Linux
 
-1.  **Ağ Keşif Senaryosu:** Program başladığında size `Ağ taraması yapılsın mı? (e/h)` diye soracaktır. `e` diyerek kendi yerel ağ bloğunuzu (Örn: `192.168.1.0/24`) girip ağdaki tüm aktif cihazların IP, MAC, Cihaz Adı ve Üretici Marka (Apple, Samsung vb.) listesini görebilirsiniz. Çıkmak için `-1` yazmanız yeterlidir.
-2.  **Hedef Odaklı Saldırı/Tarama Senaryosu:** Ağ tarayıcıdan çıktıktan sonra sizden hedef bir IP adresi istenecektir. Buraya sızma testi yapmak istediğiniz hedef makinenin IP'sini yazın.
-3.  **Port ve Gizlilik Seçimi:** Karşınıza çıkan menüden taramak istediğiniz port aralığını seçin (Örn: En popüler 100 port). Ardından sızma operasyonunun gizliliğine göre `1`, `2` veya `3` modlarından birini seçerek taramayı başlatın.
-4.  **Rapor İnceleme:** Tarama bittiğinde veya siz `CTRL+C` ile yarıda kestiğinizde, o ana kadar elde edilen tüm bulgular, işletim sistemi tahmini ve süre analiziyle birlikte **Masaüstünüzde** `{Hedef_IP}_rapor.txt` adıyla birikecektir.
+Gerekli izinlerle:
+
+```bash
+sudo python3 siber_panel.py
+```
+
+komutuyla çalıştırılabilir.
 
 ---
 
-> [!WARNING]
-> **Yasal Uyarı (Legal Disclaimer)**
-> Bu araç tamamen eğitim, akademik araştırma ve yerel siber güvenlik laboratuvarı testleri amacıyla geliştirilmiştir. Bu kodun, yasal izin belgesi veya yazılı sızma testi sözleşmesi olmayan harici ve yetkisiz sistemler üzerinde çalıştırılmasından doğacak tüm hukuki sorumluluk tamamen kullanıcıya aittir. Geliştirici hiçbir yasadışı faaliyetten ötürü sorumluluk kabul etmez.
+# Kullanım
+
+Program başlatıldığında öncelikle ağ keşfi yapmak isteyip istemediğinizi sorar.
+
+Örneğin:
+
+```text
+Ağ keşif taraması yapılsın mı? (e/h)
+=e
+```
+
+Ardından:
+
+```text
+Ağ Bloğu:
+192.168.1.0/24
+```
+
+girilerek yerel ağdaki cihazlar keşfedilebilir.
+
+Ağ keşfi atlandıktan sonra hedef IP adresi istenir:
+
+```text
+Taramak istediğin IP adresi:
+192.168.1.140
+```
+
+Daha sonra port tarama yöntemi seçilir:
+
+```text
+1 - İki port arası
+2 - Belirli portlar
+3 - Popüler portlar
+4 - Tüm TCP portları
+```
+
+Son olarak tarama profili seçilir:
+
+```text
+1 - Yüksek Trafik
+2 - Dengeli
+3 - Düşük Trafik
+```
+
+Tarama sonuçları masaüstünde:
+
+```text
+[Hedef_IP]_rapor.txt
+```
+
+formatında kaydedilir.
+
+---
+
+# Önerilen Test Ortamı
+
+Geliştirme ve test işlemlerinin kontrollü bir laboratuvar ortamında yapılması önerilir.
+
+Örneğin:
+
+```text
+Kali Linux
+     │
+     ├── Windows 11
+     │
+     └── Metasploitable / Test Makineleri
+```
+
+VirtualBox gibi sanallaştırma yazılımları kullanılarak izole bir test ağı oluşturulabilir.
+
+---
+
+# Mevcut Sınırlamalar
+
+Bu proje halen erken geliştirme aşamasındadır.
+
+Mevcut sürümün bazı sınırlamaları:
+
+- Gelişmiş servis fingerprinting sınırlıdır.
+- OS fingerprinting temel TTL analizine dayanır.
+- Banner detection her serviste çalışmayabilir.
+- UDP taraması bulunmamaktadır.
+- IPv6 desteği bulunmamaktadır.
+- Gelişmiş script sistemi bulunmamaktadır.
+- Tarama motoru henüz gelişmiş paralel/asenkron mimariye sahip değildir.
+- Gelişmiş firewall/IDS davranış analizi bulunmamaktadır.
+- TXT raporlama sistemi geliştirilmeye devam etmektedir.
+- Kod henüz tamamen modüler değildir.
+
+Bu sınırlamalar projenin gelecekteki geliştirme planlarının bir parçasıdır.
+
+---
+
+# Gelecek Planları
+
+Projenin ilerleyen sürümlerinde:
+
+- [ ] Modüler mimariye geçiş
+- [ ] Daha gelişmiş port tarama motoru
+- [ ] Daha iyi servis tespiti
+- [ ] Daha gelişmiş banner analizi
+- [ ] Daha güvenilir OS fingerprinting
+- [ ] UDP tarama desteği
+- [ ] IPv6 desteği
+- [ ] Gelişmiş TXT raporlama
+- [ ] JSON ve CSV dışa aktarma
+- [ ] Rapor filtreleme ve arama
+- [ ] Daha kapsamlı güvenlik değerlendirmeleri
+- [ ] Performans iyileştirmeleri
+- [ ] Kullanıcı geri bildirimleriyle kullanılabilirlik geliştirmeleri
+- [ ] Pentester geri bildirimleriyle teknik geliştirmeler
+
+planlanmaktadır.
+
+Uzun vadeli hedef yalnızca daha fazla özellik eklemek değildir.
+
+Asıl hedef:
+
+**Tarama sonuçlarını hem teknik kullanıcıların hem de normal kullanıcıların anlayabileceği şekilde sunan, güvenilir, düzenli ve geliştirilebilir bir ağ güvenliği aracı oluşturmaktır.**
+
+---
+
+# Proje Felsefesi
+
+Bu proje büyük ve yıllardır geliştirilen ağ tarama araçlarıyla yarışmak amacıyla oluşturulmamıştır.
+
+Projenin temel yaklaşımı:
+
+```text
+Öğren
+  ↓
+Geliştir
+  ↓
+Test et
+  ↓
+Hataları düzelt
+  ↓
+Geri bildirim al
+  ↓
+Tekrar geliştir
+```
+
+Proje küçük bir SYN scanner olarak başladı.
+
+Zaman içerisinde daha kapsamlı bir ağ keşif ve güvenlik aracı haline getirilmesi hedeflenmektedir.
+
+---
+
+# Güvenlik ve Etik Kullanım
+
+Bu araç yalnızca sahibi olduğunuz veya açıkça test etme izniniz bulunan sistemlerde kullanılmalıdır.
+
+Önerilen kullanım alanları:
+
+- Kişisel ağlar
+- Sanal makineler
+- CTF ortamları
+- Siber güvenlik laboratuvarları
+- Eğitim ortamları
+- Yetkili pentest çalışmaları
+
+Yetkisiz sistemlerde tarama yapmak yerine kontrollü test ortamları kullanılması önerilir.
+
+---
+
+# Yasal Uyarı
+
+Bu yazılım yalnızca eğitim, araştırma, CTF ve yetkili güvenlik testleri amacıyla kullanılmalıdır.
+
+Yalnızca sahibi olduğunuz veya açıkça test etme izniniz bulunan sistemleri tarayın.
+
+İzinsiz sistemlerde port taraması yapmak veya elde edilen bilgileri kötüye kullanmak hukuki ve teknik sonuçlar doğurabilir.
+
+Geliştirici, yazılımın yetkisiz kullanımından sorumlu değildir.
+
+---
+
+# Lisans
+
+Bu proje eğitim ve araştırma amacıyla geliştirilmektedir.
+
+Projeyi kullanmadan, değiştirmeden veya başka bir projeye dahil etmeden önce repository içerisinde belirtilen lisans koşullarını kontrol edin.
+
+---
+
+# Son Söz
+
+Bu proje yaklaşık 70 satırlık basit bir SYN port tarayıcısı olarak başladı.
+
+Hedef; bir anda büyük bir güvenlik platformu oluşturmak değil, projeyi adım adım geliştirmektir.
+
+Öncelik sırası:
+
+**Sağlam iskelet → daha iyi tarama → daha iyi tespit → daha iyi raporlama → geri bildirim → sürekli geliştirme**
+
+Projenin gelecekte kullanıcılar ve siber güvenlik alanında çalışan kişiler tarafından gerçekten faydalı bulunan bir araca dönüşmesi hedeflenmektedir.
